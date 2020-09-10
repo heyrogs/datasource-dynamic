@@ -9,9 +9,9 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.jiang</groupId>
-    <artifactId>dynamic-datasource</artifactId>
+    <artifactId>datasource-dynamic</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>dynamic-datasource</name>
+    <name>datasource-dynamic</name>
     <description>Demo project for Spring Boot</description>
 
     <properties>
@@ -67,6 +67,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
     </dependencies>
 
