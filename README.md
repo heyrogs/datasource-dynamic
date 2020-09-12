@@ -153,10 +153,10 @@ public class DynamicDataSourceConfig {
 
 描述: 
 
-@Configuration: 声明当前类是配置类
-@MapperScan: Mybatis 对应的 mapper 接口扫描配置
-@EnableAutoConfiguration: 自动装配定义，这里使用 exclude 作用是取消数据源的自动装配，以实现下面的自定义配置
-@ConfigurationProperties(prefix = "spring.datasource.master": 从yaml中获取前缀为 spring.datasource.master的配置信息
+* @Configuration: 声明当前类是配置类
+* @MapperScan: Mybatis 对应的 mapper 接口扫描配置
+* @EnableAutoConfiguration: 自动装配定义，这里使用 exclude 作用是取消数据源的自动装配，以实现下面的自定义配置
+* @ConfigurationProperties(prefix = "spring.datasource.master": 从yaml中获取前缀为 spring.datasource.master的配置信息
 
 ### 3.3 自定义动态数据源
 
@@ -413,4 +413,220 @@ AOP 就是基于 JDK动态代理 和 cglib 实现的， 若类有实现接口则
 
 点击 [个人jdk动态代理 和 cglib 学习日记](https://github.com/luoshijiang/datasource-dynamic/blob/master/HELP_PROXY.md) 进入了解。
 
+### 4.1 自定义一个注解，以注解的方式显示数据源切换
 
+自定义一个数据源选择注解：DBSelected
+
+```java
+package com.jiang.annotation;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+import static com.jiang.constant.DynamicDataSourceConstant.MASTER;
+
+/**
+ * @author shijiang.luo
+ * @description 数据源选择注释
+ * @date 2020-09-10 23:19
+ */
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface DBSelected {
+
+    /**
+     *
+     * 数据源名称
+     *
+     * @return
+     */
+    String value() default MASTER;
+
+}
+```
+
+* @Retention(RetentionPolicy.RUNTIME)： 表示该注解在运行时使用
+* @Target({ElementType.METHOD, ElementType.TYPE})： 表示该注解作用范围是：方法、类和接口上。
+
+### 4.2 编写 AOP 实现注解的解析
+
+使用 AOP 先拦截我自定义的注解，然后对注解所作用的方法进行切面处理。具体逻辑为:
+
+1. 先获取注解上的 value().
+2. 使用 `DynamicDataSourceContextHolder.setContextKey(dynamicKey);` 实现动态数据源的切换。
+
+```java
+package com.jiang.aop;
+
+import com.jiang.annotation.DBSelected;
+import com.jiang.context.DynamicDataSourceContextHolder;
+import org.aspectj.lang.ProceedingJoinPoint;
+import org.aspectj.lang.annotation.Around;
+import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.annotation.Pointcut;
+import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.stereotype.Component;
+
+import java.util.Optional;
+
+/**
+ * @author shijiang.luo
+ * @description 定义数据源切面
+ * @date 2020-09-10 23:23
+ */
+@Aspect
+@Component
+public class DynamicDataSourceAop {
+
+    @Pointcut("@annotation(com.jiang.annotation.DBSelected)")
+    public void dataSourcePointCut(){}
+
+    @Around("dataSourcePointCut()")
+    public Object around(ProceedingJoinPoint joinPoint) throws Throwable{
+        String dynamicKey = getAnnotation(joinPoint).value();
+        DynamicDataSourceContextHolder.setContextKey(dynamicKey);
+        try {
+            return joinPoint.proceed();
+        }finally {
+            DynamicDataSourceContextHolder.removeContextKey();
+        }
+    }
+
+    /**
+     *
+     * 根据类或方法获取注解
+     *
+     * @param joinPoint
+     * @return
+     */
+    private DBSelected getAnnotation(ProceedingJoinPoint joinPoint){
+        Class<?> clazz = joinPoint.getTarget().getClass();
+        MethodSignature methodSignature = (MethodSignature)joinPoint.getSignature();
+        return Optional.ofNullable(clazz.getAnnotation(DBSelected.class))
+                .orElse(methodSignature.getMethod().getAnnotation(DBSelected.class));
+    }
+
+}
+``` 
+
+编写完成，就可以编写 Service 来测试注解是否有效了。
+
+### 4.3 编写具体的 Service 
+
+这里使用两个注解，分别是使用默认值和选择 SLAVE 数据源的注解。
+
+```java
+
+package com.jiang.service.impl;
+
+import com.jiang.annotation.DBSelected;
+import com.jiang.dao.UserDao;
+import com.jiang.entity.dto.UserDTO;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import static com.jiang.constant.DynamicDataSourceConstant.SLAVE1;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-10 23:44
+ */
+@Service
+public class UserServiceImpl {
+
+    @Autowired
+    private UserDao userDao;
+
+    /**
+     *
+     * 通过 master 数据库获取数据
+     *
+     * @return
+     */
+    @DBSelected
+    public List<UserDTO> getListByMaster(){
+        return userDao.findList();
+    }
+
+    /**
+     *
+     * 通过 slave 数据库获取数据
+     *
+     * @return
+     */
+    @DBSelected(SLAVE1)
+    public List<UserDTO> getLlistBySlave(){
+        return userDao.findList();
+    }
+
+}
+
+```
+
+### 4.4 编写测试方法
+
+```java
+package com.jiang;
+
+import com.jiang.dao.UserDao;
+import com.jiang.entity.dto.UserDTO;
+import com.jiang.service.impl.UserServiceImpl;
+import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.util.Assert;
+
+import java.util.List;
+
+@Slf4j
+@SpringBootTest
+class DynamicDatasourceApplicationTests {
+
+    @Autowired
+    UserServiceImpl userService;
+
+    @Test
+    void contextLoads() {
+        List<UserDTO> userList = userService.getListByMaster();
+        log.info("master: {}", userList);
+        Assert.notEmpty(userList, "users is empty !");
+        userList = userService.getLlistBySlave();
+        log.info("slave: {}", userList);
+        Assert.notEmpty(userList, "user is empty");
+    }
+
+}
+```
+
+### 4.5 具体测试结果
+
+```text
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::        (v2.3.3.RELEASE)
+
+2020-09-13 01:25:17.770  INFO 35140 --- [           main] c.j.DynamicDatasourceApplicationTests    : Starting DynamicDatasourceApplicationTests on Server with PID 35140 (started by shijiang in /Users/shijiang/programmer/develop/project/datasource-dynamic)
+2020-09-13 01:25:17.773  INFO 35140 --- [           main] c.j.DynamicDatasourceApplicationTests    : No active profile set, falling back to default profiles: default
+2020-09-13 01:25:22.202  INFO 35140 --- [           main] o.s.s.concurrent.ThreadPoolTaskExecutor  : Initializing ExecutorService 'applicationTaskExecutor'
+2020-09-13 01:25:23.733  INFO 35140 --- [           main] c.j.DynamicDatasourceApplicationTests    : Started DynamicDatasourceApplicationTests in 6.944 seconds (JVM running for 10.764)
+2020-09-13 01:25:24.630  INFO 35140 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Starting...
+2020-09-13 01:25:25.849  INFO 35140 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Start completed.
+2020-09-13 01:25:25.985  INFO 35140 --- [           main] c.j.DynamicDatasourceApplicationTests    : master: [{id=1, name='master', age=20}]
+2020-09-13 01:25:25.985  INFO 35140 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Starting...
+2020-09-13 01:25:26.749  INFO 35140 --- [           main] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Start completed.
+2020-09-13 01:25:26.809  INFO 35140 --- [           main] c.j.DynamicDatasourceApplicationTests    : slave: [{id=1, name='slave', age=20}, {id=2, name='ceshi', age=20}]
+2020-09-13 01:25:26.847  INFO 35140 --- [extShutdownHook] o.s.s.concurrent.ThreadPoolTaskExecutor  : Shutting down ExecutorService 'applicationTaskExecutor'
+2020-09-13 01:25:26.848  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Shutdown initiated...
+2020-09-13 01:25:26.869  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-2 - Shutdown completed.
+2020-09-13 01:25:26.870  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2020-09-13 01:25:27.201  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+```
