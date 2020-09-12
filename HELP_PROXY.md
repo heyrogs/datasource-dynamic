@@ -23,7 +23,7 @@
 
 更具体点， 看下图：
 
-![代理模式图](http://assets.processon.com/chart_image/5f5b8a24e0b34d6f59ef17f0.png)
+![代理模式图](./main/resources/static/代理模式.png)
 
 说明： 这里接口是 ISubject ， 实现类是 RealSubject 和 Proxy， 客户端 client 调用了通过接口调用 operator() 方法，由 Proxy 代理调用
 RealSubject 的 operator(). 
@@ -164,5 +164,254 @@ ns         %     Task name
 
 ## 3. 动态代理
 
+动态代理的关键 - 反射
+
+### 3.1 java 的反射机制
+
+Java 反射机制就是代码在运行状态中， 可以动态地获取类的属性和方法， 也可以操作这个类对象的方法和属性， 这种功能就叫反射。
+
+使用反射可以动态生成类对象， 而不用像日常一样（静态）new 对象生成。 也可以动态地去执行对象的方法。
+
+案例：
+
+先定义某个类和它的方法
+
+```java
+package com.jiang.reflect;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-12 00:03
+ */
+public class ReflectService {
+
+    public void doSomething(){
+        System.out.println("reflect service...");
+    }
+
+}
+```
+
+通过反射创建对象和调用方法
+```java
+package com.jiang.reflect;
+
+import java.lang.reflect.Method;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-12 00:05
+ */
+public class ReflectRunner {
+
+    /**
+     *
+     * 使用反射动态生成 ReflectService 对象， 并且使用 invoke 执行 doSomething 方法
+     *
+     * @param args
+     */
+    public static void main(String[] args) throws Exception{
+        // 加载类
+        Class<?> clazz = Class.forName("com.jiang.reflect.ReflectService");
+        // 生成类对象
+        Object classObject = clazz.getConstructor().newInstance();
+        // 调用类对象
+        Method method = clazz.getMethod("doSomething");
+        method.invoke(classObject);
+    }
+
+}
+```
+
+从代码上可知， 只要需要知道类路径和方法名就可以执行方法了。
+
+### 3.2 JDK 动态代理
+
+JDK 默认提供了动态代理的实现
+
+实现步骤：
+
+1. 实现接口 InvocationHandler , 重写方法 invoke()；
+
+2. 使用 java.lang.reflect.Proxy 类；
+
+```java
+package com.jiang.proxy;
+
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+
+/**
+ * @author shijiang.luo
+ * @description JDK 提供动态代理
+ * 具体实现步骤：
+ * 1. 实现 InvocationHandler, 由他来实现 invoke 方法， 执行代理函数
+ * 2. 使用 Proxy 类
+ * @date 2020-09-12 00:27
+ */
+public class JdkProxyHandler implements InvocationHandler {
+
+    private Object targetObject;
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        System.out.println("jdk dynamic proxy start ");
+        Object result = method.invoke(targetObject, args);
+        System.out.println("jdk dynamic proxy ending ");
+        return result;
+    }
+
+    /**
+    * 使用 Proxy 类
+    * @param targetObject
+    * @return 
+    */
+    public Object createProxy(Object targetObject){
+        this.targetObject = targetObject;
+        return Proxy.newProxyInstance(targetObject.getClass().getClassLoader()
+                ,targetObject.getClass().getInterfaces(), this);
+    }
+}
+```
+
+在前面代理模式的代码上，实现代理， 具体调用类如下：
+
+```java
+package com.jiang.proxy;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-11 23:07
+ */
+public class Client {
+
+    /**
+     *
+     * 客户端代码调用
+     *
+     * @param args
+     */
+    public static void main(String[] args) {
+        SubjectService subjectService = new SubjectProxy(new RealSubjectServiceImpl());
+        subjectService.operator();
+
+        JdkProxyHandler jdkProxyHandler = new JdkProxyHandler();
+        subjectService = (SubjectService)jdkProxyHandler.createProxy(new RealSubjectServiceImpl());
+        subjectService.operator();
+    }
+
+}
+```
+
+JDK 提供的代理有个明显的缺点： 必须是实现了接口的类才能代理， 未能实现接口的类不能被代理到。 那么这里要实现单个类代理的话， 必须得使用上 cglib，
+
+
+### 3.3 cglib 动态代理
+
+cglib： 能通过继承来实现对象代理。
+
+实现步骤：
+
+1. 实现 MethodInterceptor 接口， 重写 intercept() 方法；
+
+2. 使用 Enhancer 设置委托类并将 interceptor 作为回调使用；
+
+代码案例:
+
+```java
+package com.jiang.cglib;
+
+import org.springframework.cglib.proxy.Enhancer;
+import org.springframework.cglib.proxy.MethodInterceptor;
+import org.springframework.cglib.proxy.MethodProxy;
+
+import java.lang.reflect.Method;
+
+/**
+ *
+ * @author shijiang.luo
+ * @description: cglib实现动态代理
+ * CGLIB：可以解决JDK代理的弊端， 即只能代理实现了接口的类， 不能代理未实现接口的类
+ * @date 2020-09-12 20:26
+ *
+ */
+public class CglibProxyInterceptor implements MethodInterceptor {
+
+    @Override
+    public Object intercept(Object o, Method method, Object[] args, MethodProxy methodProxy)
+            throws Throwable {
+        System.out.println("=====>>>>> 开始代理类");
+        Object result = methodProxy.invokeSuper(o, args);
+        System.out.println("=====>>>>> 结束代理类");
+        return result;
+    }
+
+                              //    \\
+                             // .创. \\
+                            //  .建.  \\
+                           //   .代.   \\
+                          //    .理.    \\
+                         //     ...      \\
+                        //    |=|=|=|     \\
+
+    /**
+     *
+     * 这里通过 Enhancer 设置委托类为父类 （setsuperclass）
+     * 并把 intercept 方法作为回调函数
+     * @param clazz
+     * @param <T>
+     * @return
+     */
+    public static <T> T createProxy(Class<T> clazz){
+        Enhancer enhancer = new Enhancer();
+        enhancer.setSuperclass(clazz);
+        enhancer.setCallback(new CglibProxyInterceptor());
+        return (T) enhancer.create();
+    }
+
+}
+```
+
+创建一个单独的类， 用来展示 cglib 的功能
+
+```java
+package com.jiang.cglib;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-12 22:56
+ */
+public class CglibService {
+
+    public void doSomething(){
+        System.out.println("牛批。。。。。");
+    }
+
+}
+```
+
+最终客户端调用实现
+
+```java
+package com.jiang.cglib;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-12 22:57
+ */
+public class CglibClient {
+
+    public static void main(String[] args) {
+        CglibService cglibService = CglibProxyInterceptor.createProxy(CglibService.class);
+        cglibService.doSomething();
+    }
+}
+```
 
 
