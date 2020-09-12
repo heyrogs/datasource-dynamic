@@ -34,6 +34,7 @@ class DynamicDatasourceApplicationTests {
         Assert.notEmpty(userList, "user is empty");
     }
 
+    @Test
     void slave(){
         DynamicDataSourceContextHolder.setContextKey(SLAVE1);
         UserDTO userDTO = new UserDTO("ceshi", 20);
