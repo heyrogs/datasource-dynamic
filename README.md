@@ -630,3 +630,97 @@ class DynamicDatasourceApplicationTests {
 2020-09-13 01:25:26.870  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
 2020-09-13 01:25:27.201  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
 ```
+
+## 5 解决类上不能解析注解问题
+
+使用 AnnotationMatchingPointcut 和 DefaultPointcutAdvisor 修补 aspect 不能拦截类上加注释问题。
+
+具体实现如下:
+
+```java
+package com.jiang.aop;
+
+import com.jiang.annotation.DBSelected;
+import lombok.extern.slf4j.Slf4j;
+import org.aopalliance.aop.Advice;
+import org.springframework.aop.Advisor;
+import org.springframework.aop.Pointcut;
+import org.springframework.aop.support.DefaultPointcutAdvisor;
+import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
+import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
+
+/**
+ * @author shijiang.luo
+ * @description
+ * @date 2020-09-13 13:01
+ */
+@Slf4j
+@Component
+public class DynamicDataSourceForTypeAop {
+
+    @Bean
+    public Advisor dataSourceAdvisor(){
+        Pointcut pointcut = new AnnotationMatchingPointcut(DBSelected.class, true);
+        Advice advice = new TypeAroundAdvice();
+        return new DefaultPointcutAdvisor(pointcut, advice);
+    }
+}
+```
+
+实现接口 MethodBeforeAdvice, AfterReturningAdvice 来自定义 TypeAroundAdvice 
+
+```java
+package com.jiang.aop;
+
+import com.jiang.annotation.DBSelected;
+import com.jiang.context.DynamicDataSourceContextHolder;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.AfterReturningAdvice;
+import org.springframework.aop.MethodBeforeAdvice;
+
+import java.lang.reflect.Method;
+
+/**
+ * @author shijiang.luo
+ * @description 定义环绕增强服务
+ * @date 2020-09-13 13:10
+ */
+@Slf4j
+public class TypeAroundAdvice implements MethodBeforeAdvice, AfterReturningAdvice {
+
+    @Override
+    public void afterReturning(Object returnValue, Method method, Object[] args, Object target)
+            throws Throwable {
+    }
+
+    /**
+     *
+     * 对类和接口上的注解实现解析
+     *
+     * @param method
+     * @param args
+     * @param target
+     * @throws Throwable
+     */
+    @Override
+    public void before(Method method, Object[] args, Object target)
+            throws Throwable {
+
+        DBSelected annotation = target.getClass().getAnnotation(DBSelected.class);
+        if(null == annotation){
+            log.info("注解不能放在接口上 !");
+            return;
+        }
+        log.info("当前数据源: {}", annotation.value());
+        DynamicDataSourceContextHolder.setContextKey(annotation.value());
+    }
+}
+```
+
+定义好之后，需要在类上加注释，然后在测试，这里将不再贴出具体测试结果。
+
+
+## 6 遗留问题
+
+接口上不能存放注解，目前我所了解应该是接口不能被代理成一个对象的问题。

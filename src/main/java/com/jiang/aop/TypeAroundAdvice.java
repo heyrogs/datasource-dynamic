@@ -36,7 +36,7 @@ public class TypeAroundAdvice implements MethodBeforeAdvice, AfterReturningAdvic
 
         DBSelected annotation = target.getClass().getAnnotation(DBSelected.class);
         if(null == annotation){
-            log.info("注解不能放在接口上 !");
+            log.info("@DBSelect注解不能放在接口上 !");
             return;
         }
         log.info("当前数据源: {}", annotation.value());

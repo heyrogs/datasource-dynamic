@@ -29,7 +29,7 @@ class DynamicDatasourceApplicationTests {
         List<UserDTO> userList = userService.getListByMaster();
         log.info("master: {}", userList);
         Assert.notEmpty(userList, "users is empty !");
-        userList = userService.getLlistBySlave();
+        userList = userService.getListBySlave();
         log.info("slave: {}", userList);
         Assert.notEmpty(userList, "user is empty");
     }

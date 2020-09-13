@@ -38,7 +38,7 @@ public class UserServiceImpl {
      * @return
      */
     @DBSelected(SLAVE1)
-    public List<UserDTO> getLlistBySlave(){
+    public List<UserDTO> getListBySlave(){
         return userDao.findList();
     }
 
