@@ -2,6 +2,7 @@ package com.jiang.aop;
 
 import com.jiang.annotation.DBSelected;
 import com.jiang.context.DynamicDataSourceContextHolder;
+import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -16,9 +17,10 @@ import java.util.Optional;
  * @description 定义数据源切面
  * @date 2020-09-10 23:23
  */
+@Slf4j
 @Aspect
 @Component
-public class DynamicDataSourceAop {
+public class DynamicDataSourceForMethodAop {
 
     @Pointcut("@annotation(com.jiang.annotation.DBSelected)")
     public void dataSourcePointCut(){}
@@ -26,6 +28,7 @@ public class DynamicDataSourceAop {
     @Around("dataSourcePointCut()")
     public Object around(ProceedingJoinPoint joinPoint) throws Throwable{
         String dynamicKey = getAnnotation(joinPoint).value();
+        log.info("当前数据源: {}", dynamicKey);
         DynamicDataSourceContextHolder.setContextKey(dynamicKey);
         try {
             return joinPoint.proceed();
