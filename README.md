@@ -631,7 +631,7 @@ class DynamicDatasourceApplicationTests {
 2020-09-13 01:25:27.201  INFO 35140 --- [extShutdownHook] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
 ```
 
-## 5 解决类上不能解析注解问题
+## 5. 解决类上不能解析注解问题
 
 使用 AnnotationMatchingPointcut 和 DefaultPointcutAdvisor 修补 aspect 不能拦截类上加注释问题。
 
@@ -721,6 +721,6 @@ public class TypeAroundAdvice implements MethodBeforeAdvice, AfterReturningAdvic
 定义好之后，需要在类上加注释，然后在测试，这里将不再贴出具体测试结果。
 
 
-## 6 遗留问题
+## 6. 遗留问题
 
 接口上不能存放注解，目前我所了解应该是接口不能被代理成一个对象的问题。
